@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="ru" data-theme="light">
 <head>
@@ -79,6 +80,28 @@ tr:hover td{background:var(--s2)}
 .sort-btn.active{background:var(--s2);border-color:var(--border);color:var(--text)}
 .chart-wrap{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;box-shadow:var(--shadow);margin-bottom:20px}
 .tooltip-box{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;box-shadow:var(--shadow-md);font-size:13px}
+/* Revenue filter bar */
+.rev-bar{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px 18px;box-shadow:var(--shadow);margin-bottom:20px;display:flex;flex-direction:column;gap:14px}
+.rev-row{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.rev-row+.rev-row{padding-top:14px;border-top:1px solid var(--border)}
+.rev-group{display:flex;flex-direction:column;gap:5px}
+.rev-glabel{font-size:10px;font-weight:700;letter-spacing:0.06em;color:var(--muted);text-transform:uppercase}
+.rev-seg{display:inline-flex;gap:3px;background:var(--s2);border:1px solid var(--border);border-radius:9px;padding:3px}
+.rev-seg button{padding:6px 14px;border-radius:6px;font-size:13px;font-weight:500;color:var(--muted);background:none;border:none;cursor:pointer;transition:all 0.15s;white-space:nowrap}
+.rev-seg button:hover{color:var(--text)}
+.rev-seg button.on{background:var(--surface);color:var(--text);font-weight:600;box-shadow:var(--shadow)}
+.rev-seg.accent button.on{background:var(--purple);color:#fff;box-shadow:none}
+.rev-select{position:relative;display:inline-flex;align-items:center}
+.rev-select select{appearance:none;-webkit-appearance:none;width:auto;min-width:120px;max-width:200px;padding:7px 30px 7px 12px;border-radius:9px;border:1px solid var(--border);background:var(--surface);color:var(--text);font-size:13px;font-weight:500;cursor:pointer;transition:border-color 0.15s}
+.rev-select select:hover{border-color:var(--purple)}
+.rev-select select:focus{border-color:var(--purple);box-shadow:0 0 0 3px var(--purple-dim)}
+.rev-select::after{content:"";position:absolute;right:11px;top:50%;width:7px;height:7px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:translateY(-65%) rotate(45deg);pointer-events:none}
+.rev-reset{padding:7px 14px;border-radius:9px;border:1px solid var(--border);background:var(--s2);color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s}
+.rev-reset:hover{border-color:var(--purple);color:var(--purple)}
+.rev-pill{padding:6px 14px;border-radius:20px;font-size:13px;cursor:pointer;border:1px solid var(--border);background:var(--surface);color:var(--muted);font-weight:500;transition:all 0.15s}
+.rev-pill:hover{border-color:var(--purple);color:var(--text)}
+.rev-pill.on{background:var(--purple);border-color:var(--purple);color:#fff}
+.rev-selnote{display:inline-flex;align-items:center;gap:8px;background:var(--purple-dim);color:var(--purple);border:1px solid var(--purple);border-radius:20px;padding:5px 12px;font-size:12px;font-weight:600;cursor:pointer}
 </style>
 </head>
 <body>
@@ -723,6 +746,7 @@ const RevenuePage=({setPage})=>{
   const[fDanger,setFDanger]=useState("");        // product_type
   const[fBatch,setFBatch]=useState("");
   const[fMonth,setFMonth]=useState(0);           // 0 = все
+  const[selPeriod,setSelPeriod]=useState(null);  // выбранный период по клику на графике
   const[rows,setRows]=useState([]);              // revenue_batch_cache
   const[batchRows,setBatchRows]=useState([]);    // pl_batch_cache (батч → дата/неделя)
   const[loading,setLoading]=useState(true);
@@ -808,6 +832,27 @@ const RevenuePage=({setPage})=>{
 
   const noData=!loading&&!err&&chartData.length===0;
 
+  // KPI: если выбран период (клик по графику) — считаем только по нему, иначе по всему году
+  const kpi=useMemo(()=>{
+    const src=selPeriod?chartData.filter(r=>r.label===selPeriod):chartData;
+    let rev=0,pcs=0,kg=0;
+    src.forEach(r=>{rev+=r._total||0;countries.forEach(c=>{pcs+=r["__pcs_"+c]||0;kg+=r["__kg_"+c]||0;});});
+    return{rev,pcs,kg,perKg:kg>0?rev/kg:0,perPcs:pcs>0?rev/pcs:0};
+  },[chartData,countries,selPeriod]);
+
+  // сбрасываем выбранный период при смене разреза/фильтров (метки периодов меняются)
+  useEffect(()=>{setSelPeriod(null);},[gran,year,client,fCountry,fService,fDanger,fBatch,fMonth]);
+
+  // select-группа для фильтр-панели
+  const gSel=(label,value,onChange,opts)=>h('div',{className:"rev-group"},
+    h('span',{className:"rev-glabel"},label),
+    h('div',{className:"rev-select"},h('select',{value,onChange:e=>onChange(e.target.value)},
+      h('option',{value:""},"Все"),...opts.map(o=>h('option',{key:o,value:o},o))))
+  );
+  const anyFilter=fCountry||fService||fDanger||fBatch||fMonth;
+  const resetFilters=()=>{setFCountry("");setFService("");setFDanger("");setFBatch("");setFMonth(0);};
+  const onChartClick=(e)=>{const l=e&&e.activeLabel;if(l)setSelPeriod(p=>p===l?null:l);};
+
   return h('div',{style:{background:"var(--bg)",minHeight:"100vh"}},
     h(Nav,{page:"revenue",setPage}),
     h('div',{style:{maxWidth:1280,margin:"0 auto",padding:"32px 24px"}},
@@ -820,66 +865,78 @@ const RevenuePage=({setPage})=>{
       ),
       err&&h(ErrBox,{msg:err}),
       noData&&h(ErrBox,{msg:`Нет данных за ${year}. Проверь, что pl_batch_cache и revenue_batch_cache заполнены за этот год.`}),
-      // ── Год · гранулярность · клиент ───────────────────────────────
-      h('div',{style:{display:"flex",gap:16,flexWrap:"wrap",alignItems:"center",marginBottom:14}},
-        h('div',{style:{display:"flex",alignItems:"center",gap:6}},
-          h('span',{style:{fontSize:12,color:"var(--muted)",fontWeight:600}},"ГОД"),
-          ...REV_YEARS.map(y=>h('button',{key:y,onClick:()=>setYear(y),className:`metric-chip ${year===y?"active":""}`},String(y)))
-        ),
-        h('div',{style:{display:"flex",gap:4,background:"var(--s2)",borderRadius:10,padding:4,border:"1px solid var(--border)"}},
-          ...REV_GRANS.map(([v,l])=>{
-            const active=gran===v;
-            return h('button',{key:v,onClick:()=>setGran(v),style:{padding:"7px 18px",borderRadius:7,fontSize:13,fontWeight:active?600:400,color:active?"var(--text)":"var(--muted)",background:active?"var(--surface)":"none",boxShadow:active?"var(--shadow)":"none",border:"none",transition:"all 0.15s"}},l);
-          })
-        ),
-        clients.length>1&&h(RevSel,{label:"КЛИЕНТ",value:client,onChange:setClient,options:clients})
-      ),
-      // ── Метрика · страна ───────────────────────────────────────────
-      h('div',{style:{display:"flex",gap:16,flexWrap:"wrap",alignItems:"center",marginBottom:12}},
-        h('div',{style:{display:"flex",alignItems:"center",gap:6}},
-          h('span',{style:{fontSize:12,color:"var(--muted)",fontWeight:600}},"МЕТРИКА"),
-          ...REV_METRICS.map(([v,l])=>h('button',{key:v,onClick:()=>setMetric(v),className:`metric-chip ${metric===v?"active":""}`},l))
-        ),
-        h('div',{style:{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}},
-          h('span',{style:{fontSize:12,color:"var(--muted)",fontWeight:600}},"СТРАНА"),
-          h('button',{onClick:()=>setFCountry(""),className:`metric-chip ${fCountry===""?"active":""}`},"Все"),
-          ...allCountries.map(c=>h('button',{key:c,onClick:()=>setFCountry(c),className:`metric-chip ${fCountry===c?"active":""}`},c))
-        )
-      ),
-      // ── Сервис · danger_type · партия · месяц ──────────────────────
-      h('div',{style:{display:"flex",gap:16,flexWrap:"wrap",alignItems:"center",marginBottom:20}},
-        h(RevSel,{label:"СЕРВИС",value:fService,onChange:setFService,options:services}),
-        h(RevSel,{label:"DANGER_TYPE",value:fDanger,onChange:setFDanger,options:dangers}),
-        h(RevSel,{label:"ПАРТИЯ",value:fBatch,onChange:setFBatch,options:batches}),
-        h('div',{style:{display:"flex",alignItems:"center",gap:6}},
-          h('span',{style:{fontSize:12,color:"var(--muted)",fontWeight:600}},"МЕСЯЦ"),
-          h('select',{value:fMonth,onChange:e=>setFMonth(Number(e.target.value)),
-            style:{padding:"6px 10px",borderRadius:8,fontSize:13,color:"var(--text)",background:"var(--surface)",border:"1px solid var(--border)",cursor:"pointer"}},
-            h('option',{value:0},"Все"),
-            ...REV_MONTHS.slice(1).map((m,i)=>h('option',{key:i+1,value:i+1},m))
+      // ── Панель фильтров ────────────────────────────────────────────
+      h('div',{className:"rev-bar"},
+        h('div',{className:"rev-row"},
+          h('div',{className:"rev-group"},
+            h('span',{className:"rev-glabel"},"Год"),
+            h('div',{className:"rev-seg accent"},...REV_YEARS.map(y=>h('button',{key:y,className:year===y?"on":"",onClick:()=>setYear(y)},String(y))))
+          ),
+          h('div',{className:"rev-group"},
+            h('span',{className:"rev-glabel"},"Период"),
+            h('div',{className:"rev-seg"},...REV_GRANS.map(([v,l])=>h('button',{key:v,className:gran===v?"on":"",onClick:()=>setGran(v)},l)))
+          ),
+          clients.length>1&&h('div',{className:"rev-group"},
+            h('span',{className:"rev-glabel"},"Клиент"),
+            h('div',{className:"rev-select"},h('select',{value:client,onChange:e=>setClient(e.target.value)},...clients.map(c=>h('option',{key:c,value:c},c))))
           )
+        ),
+        h('div',{className:"rev-row"},
+          h('div',{className:"rev-group"},
+            h('span',{className:"rev-glabel"},"Метрика"),
+            h('div',{className:"rev-seg accent"},...REV_METRICS.map(([v,l])=>h('button',{key:v,className:metric===v?"on":"",onClick:()=>setMetric(v)},l)))
+          ),
+          h('div',{className:"rev-group"},
+            h('span',{className:"rev-glabel"},"Страна"),
+            h('div',{style:{display:"flex",gap:6,flexWrap:"wrap"}},
+              h('button',{className:`rev-pill ${fCountry===""?"on":""}`,onClick:()=>setFCountry("")},"Все"),
+              ...allCountries.map(c=>h('button',{key:c,className:`rev-pill ${fCountry===c?"on":""}`,onClick:()=>setFCountry(c)},c))
+            )
+          )
+        ),
+        h('div',{className:"rev-row"},
+          gSel("Сервис",fService,setFService,services),
+          gSel("danger_type",fDanger,setFDanger,dangers),
+          gSel("Партия",fBatch,setFBatch,batches),
+          h('div',{className:"rev-group"},
+            h('span',{className:"rev-glabel"},"Месяц"),
+            h('div',{className:"rev-select"},h('select',{value:fMonth,onChange:e=>setFMonth(Number(e.target.value))},
+              h('option',{value:0},"Все"),...REV_MONTHS.slice(1).map((m,i)=>h('option',{key:i+1,value:i+1},m))))
+          ),
+          anyFilter&&h('div',{className:"rev-group"},h('span',{className:"rev-glabel"},"​"),h('button',{className:"rev-reset",onClick:resetFilters},"✕ Сбросить"))
         )
       ),
       loading?h(Spinner):h(Fragment,null,
+        // строка над KPI: какой период показываем
+        h('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:12,minHeight:26}},
+          h('span',{style:{fontSize:13,color:"var(--muted)"}},selPeriod?"Показатели за период:":"Показатели за весь период:"),
+          selPeriod
+            ? h('span',{className:"rev-selnote",onClick:()=>setSelPeriod(null)},selPeriod,h('span',{style:{opacity:0.7}},"✕"))
+            : h('span',{style:{fontSize:13,fontWeight:600,color:"var(--text)"}},`${year} · ${chartData.length} ${gran==="week"?"недель":gran==="month"?"месяцев":gran==="quarter"?"кварталов":"год"}`)
+        ),
         h('div',{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginBottom:28}},
-          h(StatCard,{label:"Выручка всего",value:`$${fmtK(totals.rev)}`,sub:REV_METRIC_LABEL[metric],icon:"💵",color:"#7c3aed"}),
-          h(StatCard,{label:"Отправлено шт",value:fmtK(totals.pcs),sub:"кол-во (шт)",icon:"📦",color:"#7c3aed"}),
-          h(StatCard,{label:"Отправлено кг",value:fmtK(totals.kg),sub:"вес (кг)",icon:"⚖️",color:"#7c3aed"}),
-          h(StatCard,{label:"Средний тариф",value:`$${totals.perKg.toFixed(2)}`,sub:`за кг · $${totals.perPcs.toFixed(2)} за шт`,icon:"🏷️",color:"#7c3aed"})
+          h(StatCard,{label:"Выручка всего",value:`$${fmtK(kpi.rev)}`,sub:REV_METRIC_LABEL[metric],icon:"💵",color:"#7c3aed"}),
+          h(StatCard,{label:"Отправлено шт",value:fmtK(kpi.pcs),sub:"кол-во (шт)",icon:"📦",color:"#7c3aed"}),
+          h(StatCard,{label:"Отправлено кг",value:fmtK(kpi.kg),sub:"вес (кг)",icon:"⚖️",color:"#7c3aed"}),
+          h(StatCard,{label:"Средний тариф",value:`$${kpi.perKg.toFixed(2)}`,sub:`за кг · $${kpi.perPcs.toFixed(2)} за шт`,icon:"🏷️",color:"#7c3aed"})
         ),
         h('div',{className:"chart-wrap"},
-          h('div',{style:{marginBottom:20}},
-            h('h2',{style:{fontSize:17,fontWeight:600}},`Выручка · ${REV_METRIC_LABEL[metric]}${fCountry?" · "+fCountry:" · по странам"}`),
-            h('p',{style:{fontSize:12,color:"var(--muted)",marginTop:2}},`Накопительно по ${gran==="quarter"?"кварталам":gran==="month"?"месяцам":gran==="week"?"неделям":"году"}${fMonth?" · "+REV_MONTHS[fMonth]:""}`)
+          h('div',{style:{marginBottom:20,display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:8}},
+            h('div',null,
+              h('h2',{style:{fontSize:17,fontWeight:600}},`Выручка · ${REV_METRIC_LABEL[metric]}${fCountry?" · "+fCountry:" · по странам"}`),
+              h('p',{style:{fontSize:12,color:"var(--muted)",marginTop:2}},`Накопительно по ${gran==="quarter"?"кварталам":gran==="month"?"месяцам":gran==="week"?"неделям":"году"}${fMonth?" · "+REV_MONTHS[fMonth]:""}`)
+            ),
+            h('span',{style:{fontSize:11,color:"var(--muted)",fontStyle:"italic"}},"💡 кликни по периоду — KPI пересчитаются")
           ),
           h(ResponsiveContainer,{width:"100%",height:400},
-            h(AreaChart,{data:chartData,margin:{top:10,right:20,left:0,bottom:0}},
+            h(AreaChart,{data:chartData,margin:{top:10,right:20,left:0,bottom:0},onClick:onChartClick,style:{cursor:"pointer"}},
               h(CartesianGrid,{strokeDasharray:"3 3",stroke:"var(--border)",vertical:false}),
               h(XAxis,{dataKey:"label",tick:{fill:"var(--muted)",fontSize:12},axisLine:{stroke:"var(--border)"},tickLine:false}),
               h(YAxis,{tick:{fill:"var(--muted)",fontSize:11},axisLine:false,tickLine:false,tickFormatter:fmtK}),
               h(Tooltip,{content:h(props=>h(RevTooltip,{...props,metric}))}),
               h(Legend,{wrapperStyle:{fontSize:12,color:"var(--muted)"}}),
-              ...countries.map(c=>h(Area,{key:c,type:"monotone",dataKey:c,stackId:"a",stroke:COUNTRY_COLORS[c]||"var(--muted)",fill:COUNTRY_COLORS[c]||"var(--muted)",fillOpacity:0.85,strokeWidth:1.5}))
+              selPeriod&&h(ReferenceLine,{x:selPeriod,stroke:"var(--purple)",strokeWidth:2,strokeDasharray:"4 3"}),
+              ...countries.map(c=>h(Area,{key:c,type:"monotone",dataKey:c,stackId:"a",stroke:COUNTRY_COLORS[c]||"var(--muted)",fill:COUNTRY_COLORS[c]||"var(--muted)",fillOpacity:selPeriod?0.55:0.85,strokeWidth:1.5}))
             )
           )
         )
